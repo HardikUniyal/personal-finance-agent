@@ -7,9 +7,9 @@ const groq = new Groq({
 });
 
 
-// ==========================================
+// ============================================================
 // TOOL 1: GET BALANCE
-// ==========================================
+// ============================================================
 
 function getBalance(accountId) {
 
@@ -21,9 +21,9 @@ function getBalance(accountId) {
 }
 
 
-// ==========================================
+// ============================================================
 // FAKE TRANSACTION DATA
-// ==========================================
+// ============================================================
 
 const transactions = [
 
@@ -100,9 +100,9 @@ const transactions = [
 ];
 
 
-// ==========================================
+// ============================================================
 // TOOL 2: GET TRANSACTIONS
-// ==========================================
+// ============================================================
 
 function getTransactions(
     accountId,
@@ -112,7 +112,7 @@ function getTransactions(
 ) {
 
     // Start with transactions belonging
-    // to the requested account
+    // to this account
 
     let results = transactions.filter(
         transaction =>
@@ -156,7 +156,6 @@ function getTransactions(
     }
 
 
-    // IMPORTANT:
     // Never return more than 10 transactions
 
     results = results.slice(0, 10);
@@ -167,16 +166,117 @@ function getTransactions(
 }
 
 
-// ==========================================
+// ============================================================
+// TOOL 3: GET SPENDING SUMMARY
+// ============================================================
+
+function getSpendingSummary(accountId, month) {
+
+    // Get transactions for this account
+
+    let results = transactions.filter(
+        transaction =>
+            transaction.accountId === accountId
+    );
+
+
+    // Keep only transactions from requested month
+
+    results = results.filter(
+        transaction =>
+            transaction.date.startsWith(month)
+    );
+
+
+    // Only DEBIT transactions count as spending
+
+    results = results.filter(
+        transaction =>
+            transaction.type === "debit"
+    );
+
+
+    // --------------------------------------------------------
+    // GROUP SPENDING BY CATEGORY
+    // --------------------------------------------------------
+
+    const spending = {};
+
+
+    for (const transaction of results) {
+
+        const category = transaction.category;
+
+
+        if (!spending[category]) {
+
+            spending[category] = 0;
+
+        }
+
+
+        spending[category] += transaction.amount;
+
+    }
+
+
+    // --------------------------------------------------------
+    // SORT CATEGORIES
+    // Biggest spending first
+    // --------------------------------------------------------
+
+    const sortedCategories =
+        Object.entries(spending)
+            .sort((a, b) => b[1] - a[1]);
+
+
+    // --------------------------------------------------------
+    // CALCULATE TOTAL SPENDING
+    // --------------------------------------------------------
+
+    const totalSpent =
+        results.reduce(
+            (total, transaction) =>
+                total + transaction.amount,
+            0
+        );
+
+
+    // --------------------------------------------------------
+    // RETURN SMALL SUMMARY
+    // --------------------------------------------------------
+
+    return {
+
+        month: month,
+
+        totalSpent: totalSpent,
+
+        categories: sortedCategories.map(
+            ([category, amount]) => ({
+
+                category: category,
+
+                amount: amount
+
+            })
+        )
+
+    };
+
+}
+
+
+// ============================================================
 // MAIN AI FUNCTION
-// ==========================================
+// ============================================================
 
 async function main() {
 
 
-    // ==========================================
+    // ========================================================
     // CONVERSATION
-    // ==========================================
+    // ========================================================
 
     const messages = [
 
@@ -193,16 +293,16 @@ async function main() {
             role: "user",
 
             content:
-                "Show me my food transactions. " +
+                "How much did I spend in each category this month? " +
                 "Use account ID acc123."
         }
 
     ];
 
 
-    // ==========================================
-    // FIRST GROQ REQUEST
-    // ==========================================
+    // ========================================================
+    // SEND REQUEST TO GROQ
+    // ========================================================
 
     const response =
         await groq.chat.completions.create({
@@ -212,15 +312,15 @@ async function main() {
             messages: messages,
 
 
-            // ==========================================
+            // =================================================
             // TOOLS AVAILABLE TO GROQ
-            // ==========================================
+            // =================================================
 
             tools: [
 
-                // ------------------------------------------
-                // GET BALANCE
-                // ------------------------------------------
+                // =================================================
+                // TOOL DEFINITION 1: getBalance
+                // =================================================
 
                 {
                     type: "function",
@@ -260,9 +360,9 @@ async function main() {
                 },
 
 
-                // ------------------------------------------
-                // GET TRANSACTIONS
-                // ------------------------------------------
+                // =================================================
+                // TOOL DEFINITION 2: getTransactions
+                // =================================================
 
                 {
                     type: "function",
@@ -338,6 +438,63 @@ async function main() {
 
                     }
 
+                },
+
+
+                // =================================================
+                // TOOL DEFINITION 3: getSpendingSummary
+                // =================================================
+
+                {
+                    type: "function",
+
+                    function: {
+
+                        name: "getSpendingSummary",
+
+                        description:
+                            "Calculate total spending grouped by category " +
+                            "for a specific account and month. " +
+                            "Only debit transactions count as spending.",
+
+                        parameters: {
+
+                            type: "object",
+
+                            properties: {
+
+                                accountId: {
+
+                                    type: "string",
+
+                                    description:
+                                        "The bank account ID"
+
+                                },
+
+
+                                month: {
+
+                                    type: "string",
+
+                                    description:
+                                        "Month to analyze in YYYY-MM format, " +
+                                        "for example 2026-10"
+
+                                }
+
+                            },
+
+
+                            required: [
+                                "accountId",
+                                "month"
+                            ]
+
+                        }
+
+                    }
+
                 }
 
             ],
@@ -348,17 +505,17 @@ async function main() {
         });
 
 
-    // ==========================================
-    // GET GROQ MESSAGE
-    // ==========================================
+    // ========================================================
+    // GET GROQ'S MESSAGE
+    // ========================================================
 
     const assistantMessage =
         response.choices[0].message;
 
 
-    // ==========================================
-    // CHECK IF GROQ WANTS TO USE A TOOL
-    // ==========================================
+    // ========================================================
+    // CHECK IF GROQ REQUESTED A TOOL
+    // ========================================================
 
     if (assistantMessage.tool_calls) {
 
@@ -367,14 +524,14 @@ async function main() {
         );
 
 
-        // Add Groq's message to conversation
+        // Add Groq's tool request to conversation
 
         messages.push(assistantMessage);
 
 
-        // ==========================================
+        // ====================================================
         // EXECUTE EACH TOOL
-        // ==========================================
+        // ====================================================
 
         for (
             const toolCall
@@ -407,9 +564,9 @@ async function main() {
             let result;
 
 
-            // ==========================================
-            // EXECUTE GET BALANCE
-            // ==========================================
+            // =================================================
+            // EXECUTE TOOL 1
+            // =================================================
 
             if (toolName === "getBalance") {
 
@@ -421,9 +578,9 @@ async function main() {
             }
 
 
-            // ==========================================
-            // EXECUTE GET TRANSACTIONS
-            // ==========================================
+            // =================================================
+            // EXECUTE TOOL 2
+            // =================================================
 
             else if (
                 toolName === "getTransactions"
@@ -445,9 +602,29 @@ async function main() {
             }
 
 
-            // ==========================================
+            // =================================================
+            // EXECUTE TOOL 3
+            // =================================================
+
+            else if (
+                toolName === "getSpendingSummary"
+            ) {
+
+                result =
+                    getSpendingSummary(
+
+                        args.accountId,
+
+                        args.month
+
+                    );
+
+            }
+
+
+            // =================================================
             // SHOW TOOL RESULT
-            // ==========================================
+            // =================================================
 
             console.log(
                 "\nTool result:"
@@ -456,9 +633,9 @@ async function main() {
             console.log(result);
 
 
-            // ==========================================
-            // SEND TOOL RESULT BACK TO GROQ
-            // ==========================================
+            // =================================================
+            // SEND RESULT BACK TO GROQ
+            // =================================================
 
             messages.push({
 
@@ -475,10 +652,9 @@ async function main() {
         }
 
 
-        // ==========================================
-        // SECOND GROQ REQUEST
-        // GET FINAL HUMAN ANSWER
-        // ==========================================
+        // ====================================================
+        // ASK GROQ FOR FINAL ANSWER
+        // ====================================================
 
         const finalResponse =
             await groq.chat.completions.create({
@@ -492,9 +668,9 @@ async function main() {
             });
 
 
-        // ==========================================
-        // FINAL ANSWER
-        // ==========================================
+        // ====================================================
+        // DISPLAY FINAL ANSWER
+        // ====================================================
 
         console.log(
             "\n🤖 Final answer:\n"
@@ -511,15 +687,16 @@ async function main() {
     }
 
 
-    // ==========================================
-    // NO TOOL NEEDED
-    // ==========================================
+    // ========================================================
+    // IF NO TOOL WAS NEEDED
+    // ========================================================
 
     else {
 
         console.log(
             "\n🤖 Groq final answer:\n"
         );
+
 
         console.log(
             assistantMessage.content
@@ -530,8 +707,8 @@ async function main() {
 }
 
 
-// ==========================================
+// ============================================================
 // START PROGRAM
-// ==========================================
+// ============================================================
 
 main();
