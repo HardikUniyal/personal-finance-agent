@@ -111,16 +111,11 @@ function getTransactions(
     toDate
 ) {
 
-    // Start with transactions belonging
-    // to this account
-
     let results = transactions.filter(
         transaction =>
             transaction.accountId === accountId
     );
 
-
-    // Filter by category
 
     if (category) {
 
@@ -132,8 +127,6 @@ function getTransactions(
     }
 
 
-    // Filter by starting date
-
     if (fromDate) {
 
         results = results.filter(
@@ -143,8 +136,6 @@ function getTransactions(
 
     }
 
-
-    // Filter by ending date
 
     if (toDate) {
 
@@ -160,7 +151,6 @@ function getTransactions(
 
     results = results.slice(0, 10);
 
-
     return results;
 
 }
@@ -172,15 +162,11 @@ function getTransactions(
 
 function getSpendingSummary(accountId, month) {
 
-    // Get transactions for this account
-
     let results = transactions.filter(
         transaction =>
             transaction.accountId === accountId
     );
 
-
-    // Keep only transactions from requested month
 
     results = results.filter(
         transaction =>
@@ -188,17 +174,13 @@ function getSpendingSummary(accountId, month) {
     );
 
 
-    // Only DEBIT transactions count as spending
+    // Only debit transactions count as spending
 
     results = results.filter(
         transaction =>
             transaction.type === "debit"
     );
 
-
-    // --------------------------------------------------------
-    // GROUP SPENDING BY CATEGORY
-    // --------------------------------------------------------
 
     const spending = {};
 
@@ -207,32 +189,21 @@ function getSpendingSummary(accountId, month) {
 
         const category = transaction.category;
 
-
         if (!spending[category]) {
 
             spending[category] = 0;
 
         }
 
-
         spending[category] += transaction.amount;
 
     }
 
 
-    // --------------------------------------------------------
-    // SORT CATEGORIES
-    // Biggest spending first
-    // --------------------------------------------------------
-
     const sortedCategories =
         Object.entries(spending)
             .sort((a, b) => b[1] - a[1]);
 
-
-    // --------------------------------------------------------
-    // CALCULATE TOTAL SPENDING
-    // --------------------------------------------------------
 
     const totalSpent =
         results.reduce(
@@ -242,29 +213,462 @@ function getSpendingSummary(accountId, month) {
         );
 
 
-    // --------------------------------------------------------
-    // RETURN SMALL SUMMARY
-    // --------------------------------------------------------
-
     return {
 
         month: month,
 
         totalSpent: totalSpent,
 
-        categories: sortedCategories.map(
-            ([category, amount]) => ({
+        categories:
+            sortedCategories.map(
+                ([category, amount]) => ({
 
-                category: category,
+                    category: category,
+                    amount: amount
 
-                amount: amount
-
-            })
-        )
+                })
+            )
 
     };
 
 }
+
+
+// ============================================================
+// BUDGET DATA
+// ============================================================
+
+const budgets = [];
+
+
+// ============================================================
+// TOOL 4: SET BUDGET
+// ============================================================
+
+function setBudget(
+    userId,
+    category,
+    limit
+) {
+
+    const month = "2026-10";
+
+
+    const existingBudget = budgets.find(
+        budget =>
+            budget.userId === userId &&
+            budget.category === category &&
+            budget.month === month
+    );
+
+
+    if (existingBudget) {
+
+        existingBudget.monthlyLimit = limit;
+
+        return existingBudget;
+
+    }
+
+
+    const newBudget = {
+
+        userId: userId,
+
+        category: category,
+
+        monthlyLimit: limit,
+
+        month: month
+
+    };
+
+
+    budgets.push(newBudget);
+
+    return newBudget;
+
+}
+
+
+// ============================================================
+// TOOL 5: CHECK BUDGET STATUS
+// ============================================================
+
+function checkBudgetStatus(
+    userId,
+    category
+) {
+
+    const month = "2026-10";
+
+
+    const budget = budgets.find(
+        item =>
+            item.userId === userId &&
+            item.category === category &&
+            item.month === month
+    );
+
+
+    if (!budget) {
+
+        return {
+
+            error:
+                "No budget found for this category."
+
+        };
+
+    }
+
+
+    const spending =
+        getSpendingSummary(
+            "acc123",
+            month
+        );
+
+
+    const categoryData =
+        spending.categories.find(
+            item =>
+                item.category === category
+        );
+
+
+    const spent =
+        categoryData
+            ? categoryData.amount
+            : 0;
+
+
+    const remaining =
+        budget.monthlyLimit - spent;
+
+
+    return {
+
+        category: category,
+
+        limit: budget.monthlyLimit,
+
+        spent: spent,
+
+        remaining: remaining,
+
+        overBudget:
+            remaining < 0
+
+    };
+
+}
+
+
+// ============================================================
+// ALL GROQ TOOL DEFINITIONS
+// ============================================================
+
+const tools = [
+
+    // ========================================================
+    // TOOL 1
+    // ========================================================
+
+    {
+        type: "function",
+
+        function: {
+
+            name: "getBalance",
+
+            description:
+                "Get the current balance of a bank account.",
+
+            parameters: {
+
+                type: "object",
+
+                properties: {
+
+                    accountId: {
+
+                        type: "string",
+
+                        description:
+                            "The user's bank account ID"
+
+                    }
+
+                },
+
+                required: [
+                    "accountId"
+                ]
+
+            }
+
+        }
+
+    },
+
+
+    // ========================================================
+    // TOOL 2
+    // ========================================================
+
+    {
+        type: "function",
+
+        function: {
+
+            name: "getTransactions",
+
+            description:
+                "Get a filtered list of transactions for a bank account. Never returns more than 10 transactions.",
+
+            parameters: {
+
+                type: "object",
+
+                properties: {
+
+                    accountId: {
+
+                        type: "string",
+
+                        description:
+                            "The bank account ID"
+
+                    },
+
+                    category: {
+
+                        type: "string",
+
+                        enum: [
+                            "food",
+                            "travel",
+                            "shopping",
+                            "bills"
+                        ],
+
+                        description:
+                            "Optional spending category"
+
+                    },
+
+                    fromDate: {
+
+                        type: "string",
+
+                        description:
+                            "Optional starting date in YYYY-MM-DD format"
+
+                    },
+
+                    toDate: {
+
+                        type: "string",
+
+                        description:
+                            "Optional ending date in YYYY-MM-DD format"
+
+                    }
+
+                },
+
+                required: [
+                    "accountId"
+                ]
+
+            }
+
+        }
+
+    },
+
+
+    // ========================================================
+    // TOOL 3
+    // ========================================================
+
+    {
+        type: "function",
+
+        function: {
+
+            name: "getSpendingSummary",
+
+            description:
+                "Calculate total spending grouped by category for a specific account and month. Only debit transactions count as spending.",
+
+            parameters: {
+
+                type: "object",
+
+                properties: {
+
+                    accountId: {
+
+                        type: "string",
+
+                        description:
+                            "The bank account ID"
+
+                    },
+
+                    month: {
+
+                        type: "string",
+
+                        description:
+                            "Month to analyze in YYYY-MM format, for example 2026-10"
+
+                    }
+
+                },
+
+                required: [
+                    "accountId",
+                    "month"
+                ]
+
+            }
+
+        }
+
+    },
+
+
+    // ========================================================
+    // TOOL 4
+    // ========================================================
+
+    {
+        type: "function",
+
+        function: {
+
+            name: "setBudget",
+
+            description:
+                "Set or update a monthly spending limit for a category.",
+
+            parameters: {
+
+                type: "object",
+
+                properties: {
+
+                    userId: {
+
+                        type: "string",
+
+                        description:
+                            "The user's ID"
+
+                    },
+
+                    category: {
+
+                        type: "string",
+
+                        enum: [
+                            "food",
+                            "travel",
+                            "shopping",
+                            "bills"
+                        ],
+
+                        description:
+                            "The spending category"
+
+                    },
+
+                    limit: {
+
+                        type: "number",
+
+                        description:
+                            "Monthly spending limit in rupees"
+
+                    }
+
+                },
+
+                required: [
+                    "userId",
+                    "category",
+                    "limit"
+                ]
+
+            }
+
+        }
+
+    },
+
+
+    // ========================================================
+    // TOOL 5
+    // ========================================================
+
+    {
+        type: "function",
+
+        function: {
+
+            name: "checkBudgetStatus",
+
+            description:
+                "Check spending against the monthly budget for a category.",
+
+            parameters: {
+
+                type: "object",
+
+                properties: {
+
+                    userId: {
+
+                        type: "string",
+
+                        description:
+                            "The user's ID"
+
+                    },
+
+                    category: {
+
+                        type: "string",
+
+                        enum: [
+                            "food",
+                            "travel",
+                            "shopping",
+                            "bills"
+                        ],
+
+                        description:
+                            "The spending category"
+
+                    }
+
+                },
+
+                required: [
+                    "userId",
+                    "category"
+                ]
+
+            }
+
+        }
+
+    }
+
+];
 
 
 // ============================================================
@@ -273,260 +677,92 @@ function getSpendingSummary(accountId, month) {
 
 async function main() {
 
-
-    // ========================================================
-    // CONVERSATION
-    // ========================================================
-
     const messages = [
 
         {
+
             role: "system",
 
             content:
                 "You are a helpful personal finance assistant. " +
                 "Use the available tools when necessary."
+
         },
 
-
         {
+
             role: "user",
 
             content:
-                "How much did I spend in each category this month? " +
-                "Use account ID acc123."
+                "Set a 1000 rupee monthly limit on food for user123, " +
+                "then check whether I am over that budget."
+
         }
 
     ];
 
 
     // ========================================================
-    // SEND REQUEST TO GROQ
+    // KEEP TALKING TO GROQ UNTIL IT HAS NO MORE TOOLS
     // ========================================================
 
-    const response =
-        await groq.chat.completions.create({
+    while (true) {
 
-            model: "openai/gpt-oss-20b",
+        response =
+            await groq.chat.completions.create({
 
-            messages: messages,
+                model:
+                    "openai/gpt-oss-20b",
 
+                messages: messages,
 
-            // =================================================
-            // TOOLS AVAILABLE TO GROQ
-            // =================================================
+                tools: tools,
 
-            tools: [
+                tool_choice: "auto"
 
-                // =================================================
-                // TOOL DEFINITION 1: getBalance
-                // =================================================
+            });
 
-                {
-                    type: "function",
 
-                    function: {
+        const assistantMessage =
+            response.choices[0].message;
 
-                        name: "getBalance",
 
-                        description:
-                            "Get the current balance of a bank account.",
+        // ====================================================
+        // NO TOOL CALL = FINAL ANSWER
+        // ====================================================
 
-                        parameters: {
+        if (
+            !assistantMessage.tool_calls ||
+            assistantMessage.tool_calls.length === 0
+        ) {
 
-                            type: "object",
+            console.log(
+                "\n🤖 Final answer:\n"
+            );
 
-                            properties: {
+            console.log(
+                assistantMessage.content
+            );
 
-                                accountId: {
+            break;
 
-                                    type: "string",
+        }
 
-                                    description:
-                                        "The user's bank account ID"
 
-                                }
-
-                            },
-
-                            required: [
-                                "accountId"
-                            ]
-
-                        }
-
-                    }
-
-                },
-
-
-                // =================================================
-                // TOOL DEFINITION 2: getTransactions
-                // =================================================
-
-                {
-                    type: "function",
-
-                    function: {
-
-                        name: "getTransactions",
-
-                        description:
-                            "Get a filtered list of transactions for a bank account. " +
-                            "Never returns more than 10 transactions.",
-
-                        parameters: {
-
-                            type: "object",
-
-                            properties: {
-
-                                accountId: {
-
-                                    type: "string",
-
-                                    description:
-                                        "The bank account ID"
-
-                                },
-
-
-                                category: {
-
-                                    type: "string",
-
-                                    enum: [
-                                        "food",
-                                        "travel",
-                                        "shopping",
-                                        "bills"
-                                    ],
-
-                                    description:
-                                        "Optional spending category"
-
-                                },
-
-
-                                fromDate: {
-
-                                    type: "string",
-
-                                    description:
-                                        "Optional starting date in YYYY-MM-DD format"
-
-                                },
-
-
-                                toDate: {
-
-                                    type: "string",
-
-                                    description:
-                                        "Optional ending date in YYYY-MM-DD format"
-
-                                }
-
-                            },
-
-
-                            required: [
-                                "accountId"
-                            ]
-
-                        }
-
-                    }
-
-                },
-
-
-                // =================================================
-                // TOOL DEFINITION 3: getSpendingSummary
-                // =================================================
-
-                {
-                    type: "function",
-
-                    function: {
-
-                        name: "getSpendingSummary",
-
-                        description:
-                            "Calculate total spending grouped by category " +
-                            "for a specific account and month. " +
-                            "Only debit transactions count as spending.",
-
-                        parameters: {
-
-                            type: "object",
-
-                            properties: {
-
-                                accountId: {
-
-                                    type: "string",
-
-                                    description:
-                                        "The bank account ID"
-
-                                },
-
-
-                                month: {
-
-                                    type: "string",
-
-                                    description:
-                                        "Month to analyze in YYYY-MM format, " +
-                                        "for example 2026-10"
-
-                                }
-
-                            },
-
-
-                            required: [
-                                "accountId",
-                                "month"
-                            ]
-
-                        }
-
-                    }
-
-                }
-
-            ],
-
-
-            tool_choice: "auto"
-
-        });
-
-
-    // ========================================================
-    // GET GROQ'S MESSAGE
-    // ========================================================
-
-    const assistantMessage =
-        response.choices[0].message;
-
-
-    // ========================================================
-    // CHECK IF GROQ REQUESTED A TOOL
-    // ========================================================
-
-    if (assistantMessage.tool_calls) {
+        // ====================================================
+        // GROQ REQUESTED TOOL(S)
+        // ====================================================
 
         console.log(
             "\n🤖 Groq requested a tool\n"
         );
 
 
-        // Add Groq's tool request to conversation
+        // Add Groq's message to conversation
 
-        messages.push(assistantMessage);
+        messages.push(
+            assistantMessage
+        );
 
 
         // ====================================================
@@ -537,7 +773,6 @@ async function main() {
             const toolCall
             of assistantMessage.tool_calls
         ) {
-
 
             const toolName =
                 toolCall.function.name;
@@ -565,10 +800,13 @@ async function main() {
 
 
             // =================================================
-            // EXECUTE TOOL 1
+            // TOOL 1
             // =================================================
 
-            if (toolName === "getBalance") {
+            if (
+                toolName ===
+                "getBalance"
+            ) {
 
                 result =
                     getBalance(
@@ -579,11 +817,12 @@ async function main() {
 
 
             // =================================================
-            // EXECUTE TOOL 2
+            // TOOL 2
             // =================================================
 
             else if (
-                toolName === "getTransactions"
+                toolName ===
+                "getTransactions"
             ) {
 
                 result =
@@ -603,11 +842,12 @@ async function main() {
 
 
             // =================================================
-            // EXECUTE TOOL 3
+            // TOOL 3
             // =================================================
 
             else if (
-                toolName === "getSpendingSummary"
+                toolName ===
+                "getSpendingSummary"
             ) {
 
                 result =
@@ -623,6 +863,64 @@ async function main() {
 
 
             // =================================================
+            // TOOL 4
+            // =================================================
+
+            else if (
+                toolName ===
+                "setBudget"
+            ) {
+
+                result =
+                    setBudget(
+
+                        args.userId,
+
+                        args.category,
+
+                        args.limit
+
+                    );
+
+            }
+
+
+            // =================================================
+            // TOOL 5
+            // =================================================
+
+            else if (
+                toolName ===
+                "checkBudgetStatus"
+            ) {
+
+                result =
+                    checkBudgetStatus(
+
+                        args.userId,
+
+                        args.category
+
+                    );
+
+            }
+
+
+            // =================================================
+            // UNKNOWN TOOL
+            // =================================================
+
+            else {
+
+                result = {
+                    error:
+                        `Unknown tool: ${toolName}`
+                };
+
+            }
+
+
+            // =================================================
             // SHOW TOOL RESULT
             // =================================================
 
@@ -630,11 +928,13 @@ async function main() {
                 "\nTool result:"
             );
 
-            console.log(result);
+            console.log(
+                result
+            );
 
 
             // =================================================
-            // SEND RESULT BACK TO GROQ
+            // SEND TOOL RESULT BACK TO GROQ
             // =================================================
 
             messages.push({
@@ -645,63 +945,16 @@ async function main() {
                     toolCall.id,
 
                 content:
-                    JSON.stringify(result)
+                    JSON.stringify(
+                        result
+                    )
 
             });
 
         }
 
-
-        // ====================================================
-        // ASK GROQ FOR FINAL ANSWER
-        // ====================================================
-
-        const finalResponse =
-            await groq.chat.completions.create({
-
-                model:
-                    "openai/gpt-oss-20b",
-
-                messages:
-                    messages
-
-            });
-
-
-        // ====================================================
-        // DISPLAY FINAL ANSWER
-        // ====================================================
-
-        console.log(
-            "\n🤖 Final answer:\n"
-        );
-
-
-        console.log(
-            finalResponse
-                .choices[0]
-                .message
-                .content
-        );
-
-    }
-
-
-    // ========================================================
-    // IF NO TOOL WAS NEEDED
-    // ========================================================
-
-    else {
-
-        console.log(
-            "\n🤖 Groq final answer:\n"
-        );
-
-
-        console.log(
-            assistantMessage.content
-        );
-
+        // The while loop now goes back to Groq.
+        // Groq can request another tool.
     }
 
 }
