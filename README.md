@@ -12,6 +12,14 @@ The agent understands natural-language finance requests and uses backend tools t
 - Setting monthly budgets
 - Checking whether spending exceeds a budget
 
+## Current Demo Scope
+
+The current version uses an in-memory dataset to demonstrate the AI agent and tool-calling workflow.
+
+For the demo, a default account (`acc123`) and user (`user123`) are used as the active user context.
+
+MongoDB integration is planned as the next stage to provide persistent accounts, transactions, and budgets.
+
 ## How it works
 
 ```text

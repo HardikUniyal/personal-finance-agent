@@ -12,20 +12,20 @@ const groq = new Groq({
 // ============================================================
 
 function getBalance(accountId) {
-
     return {
         accountId: accountId,
         balance: 12500
     };
-
 }
 
 
 // ============================================================
-// FAKE TRANSACTION DATA
+// TRANSACTION DATA
 // ============================================================
 
 const transactions = [
+
+    // Original demo transactions
 
     {
         txnId: "txn001",
@@ -96,8 +96,133 @@ const transactions = [
         merchant: "Refund",
         date: "2026-10-06"
     }
-
 ];
+
+
+// ============================================================
+// GENERATE 193 MORE TRANSACTIONS
+// TOTAL = 200
+// ============================================================
+
+const categories = [
+    "food",
+    "shopping",
+    "travel",
+    "bills"
+];
+
+const merchants = {
+    food: [
+        "Swiggy",
+        "Zomato",
+        "Dominos",
+        "Cafe Coffee Day",
+        "McDonalds"
+    ],
+
+    shopping: [
+        "Amazon",
+        "Flipkart",
+        "Myntra",
+        "Ajio"
+    ],
+
+    travel: [
+        "Uber",
+        "Ola",
+        "Rapido",
+        "Metro"
+    ],
+
+    bills: [
+        "Electricity",
+        "Airtel",
+        "Jio",
+        "Water Bill"
+    ]
+};
+
+
+for (let i = 8; i <= 200; i++) {
+
+    const category =
+        categories[(i - 8) % categories.length];
+
+    const merchantList =
+        merchants[category];
+
+    const merchant =
+        merchantList[i % merchantList.length];
+
+
+    // Spread transactions across September and October
+
+    const day =
+        ((i - 8) % 30) + 1;
+
+    const month =
+        i <= 103 ? "09" : "10";
+
+    const date =
+        `2026-${month}-${String(day).padStart(2, "0")}`;
+
+
+    let amount;
+
+
+    if (category === "food") {
+
+        amount =
+            200 + (i % 6) * 100;
+
+    }
+
+    else if (category === "shopping") {
+
+        amount =
+            500 + (i % 6) * 150;
+
+    }
+
+    else if (category === "travel") {
+
+        amount =
+            150 + (i % 5) * 100;
+
+    }
+
+    else {
+
+        amount =
+            400 + (i % 5) * 100;
+
+    }
+
+
+    transactions.push({
+
+        txnId:
+            `txn${String(i).padStart(3, "0")}`,
+
+        accountId:
+            "acc123",
+
+        amount:
+            amount,
+
+        type:
+            "debit",
+
+        category:
+            category,
+
+        merchant:
+            merchant,
+
+        date:
+            date
+    });
+}
 
 
 // ============================================================
@@ -111,48 +236,55 @@ function getTransactions(
     toDate
 ) {
 
-    let results = transactions.filter(
-        transaction =>
-            transaction.accountId === accountId
-    );
+    let results =
+        transactions.filter(
+            transaction =>
+                transaction.accountId === accountId
+        );
 
 
     if (category) {
 
-        results = results.filter(
-            transaction =>
-                transaction.category === category
-        );
-
+        results =
+            results.filter(
+                transaction =>
+                    transaction.category === category
+            );
     }
 
 
     if (fromDate) {
 
-        results = results.filter(
-            transaction =>
-                transaction.date >= fromDate
-        );
-
+        results =
+            results.filter(
+                transaction =>
+                    transaction.date >= fromDate
+            );
     }
 
 
     if (toDate) {
 
-        results = results.filter(
-            transaction =>
-                transaction.date <= toDate
-        );
-
+        results =
+            results.filter(
+                transaction =>
+                    transaction.date <= toDate
+            );
     }
 
 
-    // Never return more than 10 transactions
+    // Sort newest first and return maximum 10
 
-    results = results.slice(0, 10);
+    results =
+        results
+            .sort(
+                (a, b) =>
+                    b.date.localeCompare(a.date)
+            )
+            .slice(0, 10);
+
 
     return results;
-
 }
 
 
@@ -160,26 +292,32 @@ function getTransactions(
 // TOOL 3: GET SPENDING SUMMARY
 // ============================================================
 
-function getSpendingSummary(accountId, month) {
+function getSpendingSummary(
+    accountId,
+    month
+) {
 
-    let results = transactions.filter(
-        transaction =>
-            transaction.accountId === accountId
-    );
+    let results =
+        transactions.filter(
+            transaction =>
+                transaction.accountId === accountId
+        );
 
 
-    results = results.filter(
-        transaction =>
-            transaction.date.startsWith(month)
-    );
+    results =
+        results.filter(
+            transaction =>
+                transaction.date.startsWith(month)
+        );
 
 
     // Only debit transactions count as spending
 
-    results = results.filter(
-        transaction =>
-            transaction.type === "debit"
-    );
+    results =
+        results.filter(
+            transaction =>
+                transaction.type === "debit"
+        );
 
 
     const spending = {};
@@ -187,22 +325,29 @@ function getSpendingSummary(accountId, month) {
 
     for (const transaction of results) {
 
-        const category = transaction.category;
+        const category =
+            transaction.category;
+
 
         if (!spending[category]) {
 
             spending[category] = 0;
-
         }
 
-        spending[category] += transaction.amount;
 
+        spending[category] +=
+            transaction.amount;
     }
 
 
+    // Biggest spending first
+
     const sortedCategories =
         Object.entries(spending)
-            .sort((a, b) => b[1] - a[1]);
+            .sort(
+                (a, b) =>
+                    b[1] - a[1]
+            );
 
 
     const totalSpent =
@@ -224,13 +369,11 @@ function getSpendingSummary(accountId, month) {
                 ([category, amount]) => ({
 
                     category: category,
-                    amount: amount
 
+                    amount: amount
                 })
             )
-
     };
-
 }
 
 
@@ -254,20 +397,21 @@ function setBudget(
     const month = "2026-10";
 
 
-    const existingBudget = budgets.find(
-        budget =>
-            budget.userId === userId &&
-            budget.category === category &&
-            budget.month === month
-    );
+    const existingBudget =
+        budgets.find(
+            budget =>
+                budget.userId === userId &&
+                budget.category === category &&
+                budget.month === month
+        );
 
 
     if (existingBudget) {
 
-        existingBudget.monthlyLimit = limit;
+        existingBudget.monthlyLimit =
+            limit;
 
         return existingBudget;
-
     }
 
 
@@ -280,14 +424,13 @@ function setBudget(
         monthlyLimit: limit,
 
         month: month
-
     };
 
 
     budgets.push(newBudget);
 
-    return newBudget;
 
+    return newBudget;
 }
 
 
@@ -303,12 +446,13 @@ function checkBudgetStatus(
     const month = "2026-10";
 
 
-    const budget = budgets.find(
-        item =>
-            item.userId === userId &&
-            item.category === category &&
-            item.month === month
-    );
+    const budget =
+        budgets.find(
+            item =>
+                item.userId === userId &&
+                item.category === category &&
+                item.month === month
+        );
 
 
     if (!budget) {
@@ -317,9 +461,7 @@ function checkBudgetStatus(
 
             error:
                 "No budget found for this category."
-
         };
-
     }
 
 
@@ -351,17 +493,18 @@ function checkBudgetStatus(
 
         category: category,
 
-        limit: budget.monthlyLimit,
+        limit:
+            budget.monthlyLimit,
 
-        spent: spent,
+        spent:
+            spent,
 
-        remaining: remaining,
+        remaining:
+            remaining,
 
         overBudget:
             remaining < 0
-
     };
-
 }
 
 
@@ -371,9 +514,7 @@ function checkBudgetStatus(
 
 const tools = [
 
-    // ========================================================
     // TOOL 1
-    // ========================================================
 
     {
         type: "function",
@@ -397,25 +538,18 @@ const tools = [
 
                         description:
                             "The user's bank account ID"
-
                     }
-
                 },
 
                 required: [
                     "accountId"
                 ]
-
             }
-
         }
-
     },
 
 
-    // ========================================================
     // TOOL 2
-    // ========================================================
 
     {
         type: "function",
@@ -439,7 +573,6 @@ const tools = [
 
                         description:
                             "The bank account ID"
-
                     },
 
                     category: {
@@ -455,7 +588,6 @@ const tools = [
 
                         description:
                             "Optional spending category"
-
                     },
 
                     fromDate: {
@@ -464,7 +596,6 @@ const tools = [
 
                         description:
                             "Optional starting date in YYYY-MM-DD format"
-
                     },
 
                     toDate: {
@@ -473,25 +604,18 @@ const tools = [
 
                         description:
                             "Optional ending date in YYYY-MM-DD format"
-
                     }
-
                 },
 
                 required: [
                     "accountId"
                 ]
-
             }
-
         }
-
     },
 
 
-    // ========================================================
     // TOOL 3
-    // ========================================================
 
     {
         type: "function",
@@ -515,7 +639,6 @@ const tools = [
 
                         description:
                             "The bank account ID"
-
                     },
 
                     month: {
@@ -524,26 +647,19 @@ const tools = [
 
                         description:
                             "Month to analyze in YYYY-MM format, for example 2026-10"
-
                     }
-
                 },
 
                 required: [
                     "accountId",
                     "month"
                 ]
-
             }
-
         }
-
     },
 
 
-    // ========================================================
     // TOOL 4
-    // ========================================================
 
     {
         type: "function",
@@ -567,7 +683,6 @@ const tools = [
 
                         description:
                             "The user's ID"
-
                     },
 
                     category: {
@@ -583,7 +698,6 @@ const tools = [
 
                         description:
                             "The spending category"
-
                     },
 
                     limit: {
@@ -592,9 +706,7 @@ const tools = [
 
                         description:
                             "Monthly spending limit in rupees"
-
                     }
-
                 },
 
                 required: [
@@ -602,17 +714,12 @@ const tools = [
                     "category",
                     "limit"
                 ]
-
             }
-
         }
-
     },
 
 
-    // ========================================================
     // TOOL 5
-    // ========================================================
 
     {
         type: "function",
@@ -636,7 +743,6 @@ const tools = [
 
                         description:
                             "The user's ID"
-
                     },
 
                     category: {
@@ -652,20 +758,15 @@ const tools = [
 
                         description:
                             "The spending category"
-
                     }
-
                 },
 
                 required: [
                     "userId",
                     "category"
                 ]
-
             }
-
         }
-
     }
 
 ];
@@ -685,8 +786,9 @@ async function main() {
 
             content:
                 "You are a helpful personal finance assistant. " +
-                "Use the available tools when necessary."
-
+                "Use the available tools when necessary. " +
+                "For this demo, the user's userId is user123 and their accountId is acc123. " +
+                "Always use these IDs when a tool requires them."
         },
 
         {
@@ -694,17 +796,17 @@ async function main() {
             role: "user",
 
             content:
-                "Set a 1000 rupee monthly limit on food for user123, " +
-                "then check whether I am over that budget."
-
+                "Show me all my transactions."
         }
-
     ];
 
 
     // ========================================================
-    // KEEP TALKING TO GROQ UNTIL IT HAS NO MORE TOOLS
+    // MULTI-STEP TOOL CALLING LOOP
     // ========================================================
+
+    let response;
+
 
     while (true) {
 
@@ -714,12 +816,14 @@ async function main() {
                 model:
                     "openai/gpt-oss-20b",
 
-                messages: messages,
+                messages:
+                    messages,
 
-                tools: tools,
+                tools:
+                    tools,
 
-                tool_choice: "auto"
-
+                tool_choice:
+                    "auto"
             });
 
 
@@ -728,7 +832,7 @@ async function main() {
 
 
         // ====================================================
-        // NO TOOL CALL = FINAL ANSWER
+        // NO MORE TOOLS = FINAL ANSWER
         // ====================================================
 
         if (
@@ -740,17 +844,18 @@ async function main() {
                 "\n🤖 Final answer:\n"
             );
 
+
             console.log(
                 assistantMessage.content
             );
 
-            break;
 
+            break;
         }
 
 
         // ====================================================
-        // GROQ REQUESTED TOOL(S)
+        // GROQ REQUESTED TOOL
         // ====================================================
 
         console.log(
@@ -758,15 +863,13 @@ async function main() {
         );
 
 
-        // Add Groq's message to conversation
-
         messages.push(
             assistantMessage
         );
 
 
         // ====================================================
-        // EXECUTE EACH TOOL
+        // EXECUTE TOOLS
         // ====================================================
 
         for (
@@ -812,7 +915,6 @@ async function main() {
                     getBalance(
                         args.accountId
                     );
-
             }
 
 
@@ -835,9 +937,7 @@ async function main() {
                         args.fromDate,
 
                         args.toDate
-
                     );
-
             }
 
 
@@ -856,9 +956,7 @@ async function main() {
                         args.accountId,
 
                         args.month
-
                     );
-
             }
 
 
@@ -879,9 +977,7 @@ async function main() {
                         args.category,
 
                         args.limit
-
                     );
-
             }
 
 
@@ -900,9 +996,7 @@ async function main() {
                         args.userId,
 
                         args.category
-
                     );
-
             }
 
 
@@ -913,20 +1007,17 @@ async function main() {
             else {
 
                 result = {
+
                     error:
                         `Unknown tool: ${toolName}`
                 };
-
             }
 
-
-            // =================================================
-            // SHOW TOOL RESULT
-            // =================================================
 
             console.log(
                 "\nTool result:"
             );
+
 
             console.log(
                 result
@@ -934,7 +1025,7 @@ async function main() {
 
 
             // =================================================
-            // SEND TOOL RESULT BACK TO GROQ
+            // SEND RESULT BACK TO GROQ
             // =================================================
 
             messages.push({
@@ -948,15 +1039,12 @@ async function main() {
                     JSON.stringify(
                         result
                     )
-
             });
-
         }
 
-        // The while loop now goes back to Groq.
+        // Loop continues.
         // Groq can request another tool.
     }
-
 }
 
 
